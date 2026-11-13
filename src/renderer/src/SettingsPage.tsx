@@ -1,5 +1,6 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
-import type { Settings, Shortcuts } from '../../shared/types'
+import type { Settings, Shortcuts, UpdateState } from '../../shared/types'
+import { UpdateButton, updateLabel } from './Update'
 import { Kbd } from './App'
 import { DurationPicker } from './DurationPicker'
 import { Icon, type IconName } from './icons'
@@ -93,7 +94,12 @@ function ShortcutInput({ value, onChange, label }: { value: string; onChange: (v
   )
 }
 
-export function SettingsPage({ settings: s, update, shortcutErrors }: { settings: Settings; update: Update; shortcutErrors: string[] }) {
+export function SettingsPage({ settings: s, update, shortcutErrors, updateState }: {
+  settings: Settings
+  update: Update
+  shortcutErrors: string[]
+  updateState: UpdateState | null
+}) {
   const [devices, setDevices] = useState<string[] | null>(null)
   const loadDevices = () => {
     setDevices(null)
@@ -168,6 +174,14 @@ export function SettingsPage({ settings: s, update, shortcutErrors }: { settings
           </p>
         )}
       </Card>
+
+      {updateState && (
+        <Card icon="save" title="Atualizações">
+          <Row label={`Smart Capture ${updateState.version}`} hint={updateLabel(updateState) || 'Procura automaticamente ao iniciar.'}>
+            <UpdateButton state={updateState} />
+          </Row>
+        </Card>
+      )}
 
       <Card icon="palette" title="Aparência">
         <Row label="Tema">

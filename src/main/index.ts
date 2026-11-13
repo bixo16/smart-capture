@@ -1,14 +1,16 @@
 import { app, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, protocol, shell, Tray } from 'electron'
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import type { CaptureMode, Settings } from '../shared/types'
 import {
-  cancelSelection, copyImageFile, finishRecording, handleSelection, isRecording, recorderCancel, recorderStop, recorderToggle, runFfmpeg,
-  startSelection
+  cancelSelection, copyImageFile, finishRecording, handleSelection, isRecording, probeDurationMs, recorderCancel, recorderStop,
+  recorderToggle, runFfmpeg, startSelection
 } from './capture'
-import { parseDshowAudio } from './ffmpeg-args'
-import { getItem, getSettings, listHistory, removeItem, updateSettings } from './store'
+import { parseDshowAudio, trimArgs } from './ffmpeg-args'
+import { addItem, getItem, getSettings, listHistory, removeItem, updateItem, updateSettings } from './store'
+import { checkForUpdates, getUpdateState, initUpdater, installUpdate } from './updater'
 import { createWindow, getMainWindow, iconPath, send, setMainWindow } from './windows'
 
 if (!app.requestSingleInstanceLock()) app.quit()
@@ -190,12 +192,62 @@ function registerIpc(): void {
     })
     if (!r.canceled && r.filePath) await fs.promises.copyFile(item.path, r.filePath)
   })
+  // Native OS file drag (Word, Explorer, Teams…). Must use `on`/send: it has to run while the drag gesture is live.
+  ipcMain.on('startDrag', (e, id) => {
+    const item = getItem(String(id))
+    if (!item || !fs.existsSync(item.path)) return
+    const preview = item.kind === 'image' ? nativeImage.createFromPath(item.path) : nativeImage.createFromPath(iconPath)
+    e.sender.startDrag({ file: item.path, icon: preview.isEmpty() ? iconPath : preview.resize({ width: item.kind === 'image' ? 160 : 64 }) })
+  })
+  ipcMain.handle('renameItem', async (_e, id, name: unknown) => {
+    const item = itemOrThrow(id)
+    const ext = path.extname(item.path)
+    const base = String(name ?? '').trim().replace(new RegExp(`\\${ext}$`, 'i'), '').trim()
+    if (!base || base.length > 200 || /[<>:"/\\|?*\x00-\x1f]/.test(base) || /[. ]$/.test(base)) {
+      throw new Error('Nome inválido. Não uses < > : " / \\ | ? * nem termines com ponto.')
+    }
+    const target = path.join(path.dirname(item.path), base + ext)
+    if (target === item.path) return
+    // Case-only renames (a.png → A.png) hit the same file on Windows; that's fine.
+    if (fs.existsSync(target) && target.toLowerCase() !== item.path.toLowerCase()) {
+      throw new Error('Já existe um ficheiro com esse nome.')
+    }
+    await fs.promises.rename(item.path, target)
+    updateItem(item.id, { path: target })
+    send('history-changed')
+  })
+  ipcMain.handle('trimItem', async (_e, id, start: unknown, end: unknown) => {
+    const item = itemOrThrow(id)
+    const s = Number(start)
+    const t = Number(end)
+    if (item.kind !== 'video' || !Number.isFinite(s) || !Number.isFinite(t) || s < 0 || t - s < 0.1) {
+      throw new Error('Intervalo inválido.')
+    }
+    const ext = path.extname(item.path)
+    const format = ext.toLowerCase() === '.webm' ? 'webm' : 'mp4'
+    const stem = path.join(path.dirname(item.path), path.basename(item.path, ext) + ' (aparado)')
+    let out = stem + ext
+    for (let i = 2; fs.existsSync(out); i++) out = `${stem} ${i}${ext}`
+    await runFfmpeg(trimArgs(item.path, s, t, out, format, getSettings().quality))
+    addItem({
+      ...item,
+      id: randomUUID(),
+      path: out,
+      createdAt: Date.now(),
+      durationMs: (await probeDurationMs(out)) ?? Math.round((t - s) * 1000),
+      size: fs.statSync(out).size
+    })
+    send('history-changed')
+  })
   ipcMain.handle('deleteItem', async (_e, id) => {
     const item = itemOrThrow(id)
     await shell.trashItem(item.path).catch(() => fs.promises.rm(item.path, { force: true }))
     removeItem(item.id)
     send('history-changed')
   })
+  ipcMain.handle('getUpdateState', () => getUpdateState())
+  ipcMain.handle('checkForUpdates', () => checkForUpdates())
+  ipcMain.handle('installUpdate', () => installUpdate())
   ipcMain.handle('recorderToggle', () => recorderToggle())
   ipcMain.handle('recorderStop', () => recorderStop())
   ipcMain.handle('recorderCancel', () => recorderCancel())
@@ -211,6 +263,7 @@ app.whenReady().then(() => {
   createMainWindow()
   createTray()
   shortcutErrors = registerShortcuts()
+  initUpdater()
 })
 
 app.on('before-quit', (e) => {

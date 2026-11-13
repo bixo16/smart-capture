@@ -4,6 +4,7 @@ import { DurationPicker, formatDuration } from './DurationPicker'
 import { History, Thumb } from './History'
 import { Icon, type IconName } from './icons'
 import { SettingsPage } from './SettingsPage'
+import { UpdateButton, useUpdateState } from './Update'
 
 type Page = 'home' | 'history' | 'settings'
 const NAV: [Page, IconName, string][] = [
@@ -23,6 +24,7 @@ export function App() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [shortcutErrors, setShortcutErrors] = useState<string[]>([])
   const [history, setHistory] = useState<HistoryItem[]>([])
+  const update = useUpdateState()
 
   const loadSettings = useCallback(() => window.api.getSettings().then((r) => {
     setSettings(r.settings)
@@ -41,7 +43,7 @@ export function App() {
     return () => offs.forEach((off) => off())
   }, [loadSettings, loadHistory])
 
-  const update = async (patch: Partial<Settings>) => {
+  const updateSettings = async (patch: Partial<Settings>) => {
     const r = await window.api.setSettings(patch)
     setSettings(r.settings)
     setShortcutErrors(r.shortcutErrors)
@@ -62,11 +64,13 @@ export function App() {
             <Icon name={icon} /> {label}
           </button>
         ))}
+        <span className="spacer" />
+        {update && <UpdateButton state={update} compact />}
       </nav>
       <main className="content">
-        {page === 'home' && <Home settings={settings} history={history} update={update} go={setPage} shortcutErrors={shortcutErrors} />}
+        {page === 'home' && <Home settings={settings} history={history} update={updateSettings} go={setPage} shortcutErrors={shortcutErrors} />}
         {page === 'history' && <History items={history} />}
-        {page === 'settings' && <SettingsPage settings={settings} update={update} shortcutErrors={shortcutErrors} />}
+        {page === 'settings' && <SettingsPage settings={settings} update={updateSettings} shortcutErrors={shortcutErrors} updateState={update} />}
       </main>
     </div>
   )
@@ -130,7 +134,8 @@ function Home({ settings, history, update, go, shortcutErrors }: {
         ) : (
           <div className="recent-strip">
             {history.slice(0, 4).map((h) => (
-              <button key={h.id} className="recent" onClick={() => window.api.openItem(h.id)} title={h.path}>
+              <button key={h.id} className="recent" onClick={() => window.api.openItem(h.id)} title={h.path}
+                draggable onDragStart={(e) => { e.preventDefault(); window.api.startDrag(h.id) }}>
                 <Thumb item={h} />
               </button>
             ))}

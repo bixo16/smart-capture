@@ -58,6 +58,16 @@ export interface RecorderState {
   limitMs: number | null
 }
 
+export interface UpdateState {
+  status: 'unsupported' | 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'installing' | 'error'
+  /** installed version */
+  version: string
+  /** newest version on GitHub, once known */
+  latest?: string
+  percent?: number
+  error?: string
+}
+
 export interface SettingsResult {
   settings: Settings
   shortcutErrors: string[]
@@ -79,8 +89,18 @@ export interface Api {
   copyItem(id: string): Promise<void>
   saveItemAs(id: string): Promise<void>
   deleteItem(id: string): Promise<void>
+  /** Starts a native file drag of the capture; call from a dragstart handler. */
+  startDrag(id: string): void
+  /** New base name, without extension. Rejects with a user-facing message. */
+  renameItem(id: string, name: string): Promise<void>
+  /** Saves [startSec, endSec] of a video as a new file next to the original. */
+  trimItem(id: string, startSec: number, endSec: number): Promise<void>
+  getUpdateState(): Promise<UpdateState>
+  checkForUpdates(): Promise<void>
+  /** Downloads the new version, then installs it silently and restarts the app. */
+  installUpdate(): Promise<void>
   recorderToggle(): Promise<void>
   recorderStop(): Promise<void>
   recorderCancel(): Promise<void>
-  on(channel: 'history-changed' | 'settings-changed' | 'navigate' | 'recorder-state', cb: (data: any) => void): () => void
+  on(channel: 'history-changed' | 'settings-changed' | 'navigate' | 'recorder-state' | 'update-state', cb: (data: any) => void): () => void
 }

@@ -91,6 +91,11 @@ export function addItem(item: HistoryItem): void {
   writeJson('history.json', history)
 }
 
+export function updateItem(id: string, patch: Partial<HistoryItem>): void {
+  history = history.map((h) => (h.id === id ? { ...h, ...patch } : h))
+  writeJson('history.json', history)
+}
+
 export function removeItem(id: string): void {
   history = history.filter((h) => h.id !== id)
   writeJson('history.json', history)

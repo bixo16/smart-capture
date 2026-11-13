@@ -2,6 +2,42 @@ import { useEffect, useMemo, useState } from 'react'
 import type { HistoryItem } from '../../shared/types'
 import { formatClock } from './DurationPicker'
 import { Icon, type IconName } from './icons'
+import { VideoTrimmer } from './VideoTrimmer'
+
+const fileName = (h: HistoryItem) => h.path.split(/[\\/]/).pop()!
+const stem = (h: HistoryItem) => fileName(h).replace(/\.[^.]+$/, '')
+const ext = (h: HistoryItem) => fileName(h).slice(stem(h).length)
+
+/** Inline file-name editor: Enter saves, Esc cancels, errors stay visible. */
+function RenameField({ item, onDone }: { item: HistoryItem; onDone: () => void }) {
+  const [value, setValue] = useState(stem(item))
+  const [error, setError] = useState('')
+  const save = async () => {
+    try {
+      await window.api.renameItem(item.id, value)
+      onDone()
+    } catch (e) {
+      setError(String((e as Error).message).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))
+    }
+  }
+  return (
+    <div className="rename" onClick={(e) => e.stopPropagation()}>
+      <div className="rename-row">
+        <input autoFocus value={value} aria-label="Novo nome do ficheiro" aria-invalid={!!error}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => { setValue(e.target.value); setError('') }}
+          onKeyDown={(e) => {
+            e.stopPropagation()
+            if (e.key === 'Enter') save()
+            else if (e.key === 'Escape') onDone()
+          }}
+          onBlur={() => !error && value.trim() === stem(item) && onDone()} />
+        <span className="muted">{ext(item)}</span>
+      </div>
+      {error && <small className="rename-error" role="alert">{error}</small>}
+    </div>
+  )
+}
 
 const src = (h: HistoryItem) => `media://${h.id}/`
 
@@ -32,6 +68,7 @@ export function History({ items }: { items: HistoryItem[] }) {
   const [newestFirst, setNewestFirst] = useState(true)
   const [preview, setPreview] = useState<HistoryItem | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState<string | null>(null)
 
   const shown = useMemo(() => {
     const list = items.filter((h) => filter === 'all' || h.kind === filter)
@@ -74,16 +111,22 @@ export function History({ items }: { items: HistoryItem[] }) {
         <div className="grid">
           {shown.map((h) => (
             <article key={h.id} className="card" tabIndex={0} onClick={() => setPreview(h)}
+              draggable={renaming !== h.id} onDragStart={(e) => { e.preventDefault(); window.api.startDrag(h.id) }}
+              title="Arrasta para o Word, o Explorador ou outra app"
               onKeyDown={(e) => e.key === 'Enter' && setPreview(h)}>
               <Thumb item={h} />
               <div className="card-body">
-                <div className="card-title" title={h.path}>{h.path.split(/[\\/]/).pop()}</div>
+                {renaming === h.id
+                  ? <RenameField item={h} onDone={() => setRenaming(null)} />
+                  : <div className="card-title" title={h.path} onDoubleClick={(e) => { e.stopPropagation(); setRenaming(h.id) }}>{fileName(h)}</div>}
                 <div className="card-meta">{dateFmt.format(h.createdAt)} · {h.width}×{h.height} · {formatSize(h.size)}</div>
               </div>
               <div className="card-actions">
                 {h.kind === 'video'
                   ? action('play', 'Reproduzir', () => setPreview(h))
                   : action('copy', 'Copiar imagem', () => window.api.copyItem(h.id))}
+                {h.kind === 'video' && action('scissors', 'Aparar vídeo', () => setPreview(h))}
+                {action('edit', 'Mudar o nome', () => setRenaming(h.id))}
                 {action('open', 'Abrir', () => window.api.openItem(h.id))}
                 {action('folder', 'Abrir localização', () => window.api.showItem(h.id))}
                 {action('save', 'Guardar como…', () => window.api.saveItemAs(h.id))}
@@ -104,11 +147,9 @@ export function History({ items }: { items: HistoryItem[] }) {
       {preview && (
         <div className="modal" role="dialog" aria-modal="true" aria-label="Pré-visualização" onClick={() => setPreview(null)}>
           <div className="modal-body" onClick={(e) => e.stopPropagation()}>
-            {preview.kind === 'image'
-              ? <img src={src(preview)} alt="" />
-              : <video src={src(preview)} controls autoPlay />}
+            {preview.kind === 'image' ? <img src={src(preview)} alt="" /> : <VideoTrimmer item={preview} />}
             <div className="modal-bar">
-              <span>{preview.path.split(/[\\/]/).pop()}</span>
+              <span>{fileName(preview)}</span>
               <span className="spacer" />
               {preview.kind === 'image' && <button onClick={() => window.api.copyItem(preview.id)}><Icon name="copy" size={16} /> Copiar</button>}
               <button onClick={() => window.api.showItem(preview.id)}><Icon name="folder" size={16} /> Localização</button>

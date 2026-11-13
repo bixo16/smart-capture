@@ -24,6 +24,13 @@ export function runFfmpeg(args: string[]): Promise<string> {
   })
 }
 
+/** Real file duration (ffmpeg -i always "fails" without an output, but prints Duration). */
+export async function probeDurationMs(file: string): Promise<number | null> {
+  const info = await runFfmpeg(['-hide_banner', '-i', file]).catch((e: Error) => e.message)
+  const d = /Duration: (\d+):(\d+):([\d.]+)/.exec(info)
+  return d ? Math.round(((+d[1] * 60 + +d[2]) * 60 + +d[3]) * 1000) : null
+}
+
 export function copyImageFile(file: string): Promise<void> {
   const png = new Uint8Array(nativeImage.createFromPath(file).toPNG())
   return clipboard.write([new ClipboardItem({ 'image/png': new Blob([png], { type: 'image/png' }) })])
@@ -351,9 +358,6 @@ class Recording {
         await runFfmpeg(concatArgs(list, out, this.ext))
       }
       this.cleanup()
-      // Real file duration (ffmpeg -i always "fails" without an output, but prints Duration).
-      const info = await runFfmpeg(['-hide_banner', '-i', out]).catch((e: Error) => e.message)
-      const d = /Duration: (\d+):(\d+):([\d.]+)/.exec(info)
       const r = evenRegion(this.region)
       this.resolve({
         id: randomUUID(),
@@ -362,7 +366,7 @@ class Recording {
         createdAt: Date.now(),
         width: r.width,
         height: r.height,
-        durationMs: d ? Math.round(((+d[1] * 60 + +d[2]) * 60 + +d[3]) * 1000) : this.elapsed,
+        durationMs: (await probeDurationMs(out)) ?? this.elapsed,
         size: fs.statSync(out).size
       })
     } catch (e) {

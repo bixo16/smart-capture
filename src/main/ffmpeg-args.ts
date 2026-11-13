@@ -58,18 +58,25 @@ export function recordArgs(o: RecordOptions): string[] {
     ...regionInput(evenRegion(o.region), o.fps)]
   if (o.audioDevice) args.push('-thread_queue_size', '1024', '-f', 'dshow', '-i', `audio=${o.audioDevice}`)
   if (o.durationSec !== null) args.push('-t', o.durationSec.toFixed(3))
-  const crf = String(CRF[o.format][o.quality])
-  if (o.format === 'mp4') {
-    args.push('-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-crf', crf, '-pix_fmt', 'yuv420p')
-    if (o.audioDevice) args.push('-c:a', 'aac', '-b:a', '160k')
-    args.push('-movflags', '+faststart')
-  } else {
-    args.push('-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', '-row-mt', '1',
-      '-b:v', '0', '-crf', crf, '-pix_fmt', 'yuv420p')
-    if (o.audioDevice) args.push('-c:a', 'libopus', '-b:a', '128k')
-  }
-  args.push('-r', String(o.fps), o.out)
+  args.push(...encodeArgs(o.format, o.quality, !!o.audioDevice), '-r', String(o.fps), o.out)
   return args
+}
+
+function encodeArgs(format: 'mp4' | 'webm', quality: 'high' | 'medium' | 'low', audio: boolean): string[] {
+  const crf = String(CRF[format][quality])
+  if (format === 'mp4') {
+    return ['-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-crf', crf, '-pix_fmt', 'yuv420p',
+      ...(audio ? ['-c:a', 'aac', '-b:a', '160k'] : []), '-movflags', '+faststart']
+  }
+  return ['-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', '-row-mt', '1', '-b:v', '0', '-crf', crf,
+    '-pix_fmt', 'yuv420p', ...(audio ? ['-c:a', 'libopus', '-b:a', '128k'] : [])]
+}
+
+/** Frame-accurate trim: re-encodes (stream copy could only cut on keyframes, seconds apart). */
+export function trimArgs(input: string, startSec: number, endSec: number, out: string,
+  format: 'mp4' | 'webm', quality: 'high' | 'medium' | 'low'): string[] {
+  return ['-hide_banner', '-loglevel', 'error', '-y', '-ss', startSec.toFixed(3), '-i', input,
+    '-t', (endSec - startSec).toFixed(3), ...encodeArgs(format, quality, true), out]
 }
 
 /** Joins pause/resume segments without re-encoding. */

@@ -8,7 +8,7 @@
 
 Uma alternativa moderna à Ferramenta de Recorte do Windows, com gravação real de regiões, duração definida e pausa/retoma.
 
-[![Download](https://img.shields.io/badge/⬇_Download-Windows_10%2F11-0067C0?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/bixo16/smart-capture/releases/latest/download/SmartCapture-Setup-1.0.0.exe)
+[![Download](https://img.shields.io/badge/⬇_Download-Windows_10%2F11-0067C0?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/bixo16/smart-capture/releases/latest/download/SmartCapture-Setup.exe)
 
 ![Versão](https://img.shields.io/github/v/release/bixo16/smart-capture?style=flat-square&color=2b8cff)
 ![Plataforma](https://img.shields.io/badge/plataforma-Windows-0078D4?style=flat-square)
@@ -67,8 +67,10 @@ Cada frame é lido do Windows **apenas no retângulo que selecionaste**, em píx
 
 ### 🗂️ Histórico
 - Pré-visualiza imagens e reproduz vídeos
-- Abrir, copiar, guardar como, abrir a localização
-- Eliminar (vai para a Reciclagem)
+- ✂️ **Apara vídeos**: marca o início e o fim e guarda só essa parte
+- ✏️ Muda o nome dos ficheiros
+- 🖱️ **Arrasta** capturas para o Word, o Teams ou o Explorador
+- Abrir, copiar, guardar como, abrir a localização, eliminar
 - Filtrar e ordenar por data
 
 </td>
@@ -101,9 +103,13 @@ O design segue o Windows 11: cantos arredondados, animações suaves e tema que 
 
 ## 📥 Instalação
 
-1. Descarrega o **[SmartCapture-Setup-1.0.0.exe](https://github.com/bixo16/smart-capture/releases/latest/download/SmartCapture-Setup-1.0.0.exe)**.
+1. Descarrega o **[SmartCapture-Setup.exe](https://github.com/bixo16/smart-capture/releases/latest/download/SmartCapture-Setup.exe)**.
 2. Abre o instalador. Se o SmartScreen avisar, clica em **Mais informações → Executar mesmo assim** (o instalador ainda não está assinado digitalmente).
 3. A app fica na área de notificação, ao lado do relógio. Fechar a janela não a encerra, e os atalhos continuam a funcionar.
+
+### 🔄 Atualizações automáticas
+
+Só precisas de descarregar o instalador uma vez. A partir da versão 1.1.0, a app procura versões novas ao iniciar. Quando há uma, aparece o botão **Atualizar** na barra lateral: um clique transfere a versão nova, instala-a e reinicia a app.
 
 ## 🛠️ Como funciona
 
@@ -126,6 +132,7 @@ npm run dev        # hot reload
 npm test           # testes dos argumentos do FFmpeg
 npm run typecheck
 npm run dist       # gera o instalador em dist/
+npm run release    # publica uma versão nova no GitHub (sobe "version" no package.json; precisa de GH_TOKEN)
 ```
 
 ```
