@@ -1,7 +1,7 @@
 {
   "name": "smart-capture",
   "productName": "Smart Capture",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Captura e gravação de regiões do ecrã para Windows",
   "main": "out/main/index.js",
   "private": true,

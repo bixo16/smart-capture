@@ -135,7 +135,8 @@ function Home({ settings, history, update, go, shortcutErrors }: {
           <div className="recent-strip">
             {history.slice(0, 4).map((h) => (
               <button key={h.id} className="recent" onClick={() => window.api.openItem(h.id)} title={h.path}
-                draggable onDragStart={(e) => { e.preventDefault(); window.api.startDrag(h.id) }}>
+                draggable onDragStart={(e) => { e.preventDefault(); window.api.startDrag(h.id, e.altKey) }}
+                onPointerEnter={() => h.kind === 'video' && window.api.prepareDrag(h.id)}>
                 <Thumb item={h} />
               </button>
             ))}

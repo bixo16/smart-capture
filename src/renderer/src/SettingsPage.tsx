@@ -123,6 +123,9 @@ export function SettingsPage({ settings: s, update, shortcutErrors, updateState 
         <Row label="Copiar screenshots para a área de transferência">
           <Toggle label="Copiar screenshots" checked={s.copyToClipboard} onChange={(v) => update({ copyToClipboard: v })} />
         </Row>
+        <Row label="Pedir o nome depois de capturar" hint="Abre uma pequena janela para dares nome ao ficheiro logo a seguir a cada screenshot ou gravação">
+          <Toggle label="Pedir o nome depois de capturar" checked={s.askName} onChange={(v) => update({ askName: v })} />
+        </Row>
       </Card>
 
       <Card icon="video" title="Gravação">

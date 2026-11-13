@@ -31,6 +31,7 @@ export const defaultSettings: Settings = {
   audioEnabled: false,
   audioDevice: '',
   copyToClipboard: true,
+  askName: false,
   theme: 'system',
   // Win+Shift+S is reserved by Windows for its own Snipping Tool, so the default avoids it.
   shortcuts: { capture: 'Alt+Shift+S', record: 'Ctrl+Alt+R', pause: 'Alt+Shift+P' }
@@ -57,6 +58,7 @@ const allowed: { [K in keyof Settings]?: (v: any) => boolean } = {
   audioEnabled: (v) => typeof v === 'boolean',
   audioDevice: (v) => typeof v === 'string',
   copyToClipboard: (v) => typeof v === 'boolean',
+  askName: (v) => typeof v === 'boolean',
   theme: (v) => ['system', 'light', 'dark'].includes(v),
   shortcuts: (v) => v && ['capture', 'record', 'pause'].every((k) => typeof v[k] === 'string')
 }

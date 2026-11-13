@@ -79,6 +79,19 @@ export function trimArgs(input: string, startSec: number, endSec: number, out: s
     '-t', (endSec - startSec).toFixed(3), ...encodeArgs(format, quality, true), out]
 }
 
+/** Max video length turned into a GIF for dragging; longer clips would make huge documents. */
+export const GIF_MAX_SEC = 120
+
+/**
+ * Looping GIF of a video (Word plays animated GIFs inline; it can't play local MP4s).
+ * Two-pass palette in one filter graph keeps colours clean; width capped at 960px, 15 fps.
+ */
+export function gifArgs(input: string, out: string): string[] {
+  return ['-hide_banner', '-loglevel', 'error', '-y', '-i', input, '-an',
+    '-vf', "fps=15,scale='min(960,iw)':-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4",
+    '-loop', '0', out]
+}
+
 /** Joins pause/resume segments without re-encoding. */
 export function concatArgs(listFile: string, out: string, format: 'mp4' | 'webm'): string[] {
   return ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy',

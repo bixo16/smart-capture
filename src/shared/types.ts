@@ -19,6 +19,8 @@ export interface Settings {
   /** DirectShow audio device name (microphone or "Stereo Mix" for system audio) */
   audioDevice: string
   copyToClipboard: boolean
+  /** show a small "name this capture" prompt right after each save */
+  askName: boolean
   theme: 'system' | 'light' | 'dark'
   shortcuts: Shortcuts
 }
@@ -59,7 +61,7 @@ export interface RecorderState {
 }
 
 export interface UpdateState {
-  status: 'unsupported' | 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'installing' | 'error'
+  status: 'unsupported' | 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'ready' | 'installing' | 'error'
   /** installed version */
   version: string
   /** newest version on GitHub, once known */
@@ -89,8 +91,10 @@ export interface Api {
   copyItem(id: string): Promise<void>
   saveItemAs(id: string): Promise<void>
   deleteItem(id: string): Promise<void>
-  /** Starts a native file drag of the capture; call from a dragstart handler. */
-  startDrag(id: string): void
+  /** Starts a native file drag; videos go as a looping GIF unless `original` (Alt held). Call from dragstart. */
+  startDrag(id: string, original?: boolean): void
+  /** Pre-builds a video's drag GIF (call on hover) so the drag itself is instant. */
+  prepareDrag(id: string): Promise<void>
   /** New base name, without extension. Rejects with a user-facing message. */
   renameItem(id: string, name: string): Promise<void>
   /** Saves [startSec, endSec] of a video as a new file next to the original. */
@@ -102,5 +106,7 @@ export interface Api {
   recorderToggle(): Promise<void>
   recorderStop(): Promise<void>
   recorderCancel(): Promise<void>
+  /** Launch splash "Saltar": open the app now, keep downloading in the background. */
+  skipStartupUpdate(): Promise<void>
   on(channel: 'history-changed' | 'settings-changed' | 'navigate' | 'recorder-state' | 'update-state', cb: (data: any) => void): () => void
 }

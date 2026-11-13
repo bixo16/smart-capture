@@ -9,7 +9,7 @@ const stem = (h: HistoryItem) => fileName(h).replace(/\.[^.]+$/, '')
 const ext = (h: HistoryItem) => fileName(h).slice(stem(h).length)
 
 /** Inline file-name editor: Enter saves, Esc cancels, errors stay visible. */
-function RenameField({ item, onDone }: { item: HistoryItem; onDone: () => void }) {
+export function RenameField({ item, onDone }: { item: HistoryItem; onDone: () => void }) {
   const [value, setValue] = useState(stem(item))
   const [error, setError] = useState('')
   const save = async () => {
@@ -111,8 +111,9 @@ export function History({ items }: { items: HistoryItem[] }) {
         <div className="grid">
           {shown.map((h) => (
             <article key={h.id} className="card" tabIndex={0} onClick={() => setPreview(h)}
-              draggable={renaming !== h.id} onDragStart={(e) => { e.preventDefault(); window.api.startDrag(h.id) }}
-              title="Arrasta para o Word, o Explorador ou outra app"
+              draggable={renaming !== h.id} onDragStart={(e) => { e.preventDefault(); window.api.startDrag(h.id, e.altKey) }}
+              onPointerEnter={() => h.kind === 'video' && window.api.prepareDrag(h.id)}
+              title={h.kind === 'video' ? 'Arrasta para o Word: entra como GIF animado (Alt + arrastar = MP4 original)' : 'Arrasta para o Word, o Explorador ou outra app'}
               onKeyDown={(e) => e.key === 'Enter' && setPreview(h)}>
               <Thumb item={h} />
               <div className="card-body">

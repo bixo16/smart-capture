@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { concatList, evenRegion, parseDshowAudio, recordArgs, screenshotArgs, trimArgs } from './ffmpeg-args.ts'
+import { concatList, evenRegion, gifArgs, parseDshowAudio, recordArgs, screenshotArgs, trimArgs } from './ffmpeg-args.ts'
 
 test('screenshot grabs only the region', () => {
   const a = screenshotArgs({ x: 1500, y: 800, width: 400, height: 270 }, 'o.png', 'png')
@@ -31,6 +31,14 @@ test('trim seeks to start and keeps only the selected length', () => {
   assert.ok(a.indexOf('-ss') < a.indexOf('-i'))
   assert.equal(a[a.indexOf('-t') + 1], '2.750')
   assert.equal(a.at(-1), 'out.mp4')
+})
+
+test('gif loops forever, drops audio, caps width', () => {
+  const a = gifArgs('in.mp4', 'out.gif')
+  assert.equal(a[a.indexOf('-loop') + 1], '0')
+  assert.ok(a.includes('-an'))
+  assert.match(a[a.indexOf('-vf') + 1], /min\(960,iw\)/)
+  assert.equal(a.at(-1), 'out.gif')
 })
 
 test('concat list escapes quotes', () => {

@@ -1,11 +1,11 @@
-import { BrowserWindow, clipboard, ClipboardItem, globalShortcut, nativeImage, Notification, screen, type Display, type Rectangle } from 'electron'
+import { app, BrowserWindow, clipboard, ClipboardItem, globalShortcut, nativeImage, Notification, screen, type Display, type Rectangle } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import ffmpegStatic from 'ffmpeg-static'
-import type { CaptureMode, RecorderState, SelectionRequest } from '../shared/types'
-import { concatArgs, concatList, evenRegion, recordArgs, screenshotArgs, type Region } from './ffmpeg-args'
+import type { CaptureMode, HistoryItem, RecorderState, SelectionRequest } from '../shared/types'
+import { concatArgs, concatList, evenRegion, GIF_MAX_SEC, gifArgs, recordArgs, screenshotArgs, type Region } from './ffmpeg-args'
 import { addItem, getSettings, newFilePath } from './store'
 import { createWindow, getMainWindow, iconPath, send } from './windows'
 
@@ -31,9 +31,64 @@ export async function probeDurationMs(file: string): Promise<number | null> {
   return d ? Math.round(((+d[1] * 60 + +d[2]) * 60 + +d[3]) * 1000) : null
 }
 
+// ---------------------------------------------------------------- drag-as-GIF cache
+
+const gifDir = (id: string) => path.join(app.getPath('userData'), 'drag-gifs', id)
+/** Cached GIF for a video, named like the video so it shows a sensible name where it's dropped. */
+export const dragGifPath = (item: HistoryItem) => path.join(gifDir(item.id), path.basename(item.path, path.extname(item.path)) + '.gif')
+const gifJobs = new Map<string, Promise<void>>()
+
+/** Builds the drag GIF in the background (once per video+name); later drags then use it instantly. */
+export function prepareDragGif(item: HistoryItem): Promise<void> {
+  const out = dragGifPath(item)
+  if (item.kind !== 'video' || (item.durationMs ?? 0) > GIF_MAX_SEC * 1000 || fs.existsSync(out)) return Promise.resolve()
+  let job = gifJobs.get(out)
+  if (!job) {
+    fs.rmSync(gifDir(item.id), { recursive: true, force: true }) // drop a GIF left from an old name
+    fs.mkdirSync(gifDir(item.id), { recursive: true })
+    const tmp = out + '.part.gif' // never let a half-written GIF be dragged
+    job = runFfmpeg(gifArgs(item.path, tmp))
+      .then(() => fs.renameSync(tmp, out))
+      .catch((e) => console.error('gif failed', e))
+      .finally(() => gifJobs.delete(out))
+    gifJobs.set(out, job)
+  }
+  return job
+}
+
+export const removeDragGif = (id: string) => fs.rmSync(gifDir(id), { recursive: true, force: true })
+
 export function copyImageFile(file: string): Promise<void> {
   const png = new Uint8Array(nativeImage.createFromPath(file).toPNG())
   return clipboard.write([new ClipboardItem({ 'image/png': new Blob([png], { type: 'image/png' }) })])
+}
+
+/** Small floating "name this capture" window, near the cursor, so naming never needs the main window. */
+function openNamePrompt(id: string): void {
+  const W = 440
+  const H = 132
+  const cursor = screen.getCursorScreenPoint()
+  const wa = screen.getDisplayNearestPoint(cursor).workArea
+  const win = createWindow(`rename?id=${encodeURIComponent(id)}`, {
+    x: Math.round(Math.min(Math.max(cursor.x - W / 2, wa.x + 8), wa.x + wa.width - W - 8)),
+    y: Math.round(Math.min(Math.max(cursor.y + 16, wa.y + 8), wa.y + wa.height - H - 8)),
+    width: W,
+    height: H,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    alwaysOnTop: true
+  })
+  win.setAlwaysOnTop(true, 'screen-saver')
+  win.once('ready-to-show', () => {
+    win.show()
+    win.focus()
+  })
 }
 
 let lastNotification: Notification | null = null
@@ -149,8 +204,9 @@ async function takeScreenshot(region: Region): Promise<void> {
   const out = newFilePath('Screenshot', s.imageFormat)
   await runFfmpeg(screenshotArgs(region, out, s.imageFormat))
   if (s.copyToClipboard) await copyImageFile(out)
+  const id = randomUUID()
   addItem({
-    id: randomUUID(),
+    id,
     kind: 'image',
     path: out,
     createdAt: Date.now(),
@@ -159,6 +215,7 @@ async function takeScreenshot(region: Region): Promise<void> {
     size: fs.statSync(out).size
   })
   send('history-changed')
+  if (s.askName) return openNamePrompt(id)
   notify('Screenshot guardado', s.copyToClipboard ? 'Copiado para a área de transferência.' : path.basename(out), openHistory)
 }
 
@@ -215,6 +272,8 @@ function startRecording(phys: Region, dip: Rectangle, d: Display, limitMs: numbe
       if (item) {
         addItem(item)
         send('history-changed')
+        void prepareDragGif(item)
+        if (getSettings().askName) return openNamePrompt(item.id)
         notify('Gravação guardada', `${path.basename(item.path)} · ${(item.durationMs! / 1000).toFixed(1)} s`, openHistory)
       }
     },

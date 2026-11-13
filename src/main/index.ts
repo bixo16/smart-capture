@@ -5,12 +5,12 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import type { CaptureMode, Settings } from '../shared/types'
 import {
-  cancelSelection, copyImageFile, finishRecording, handleSelection, isRecording, probeDurationMs, recorderCancel, recorderStop,
+  cancelSelection, copyImageFile, dragGifPath, finishRecording, prepareDragGif, removeDragGif, handleSelection, isRecording, probeDurationMs, recorderCancel, recorderStop,
   recorderToggle, runFfmpeg, startSelection
 } from './capture'
 import { parseDshowAudio, trimArgs } from './ffmpeg-args'
 import { addItem, getItem, getSettings, listHistory, removeItem, updateItem, updateSettings } from './store'
-import { checkForUpdates, getUpdateState, initUpdater, installUpdate } from './updater'
+import { checkForUpdates, getUpdateState, initUpdater, installUpdate, skipStartupUpdate, startupUpdate } from './updater'
 import { createWindow, getMainWindow, iconPath, send, setMainWindow } from './windows'
 
 if (!app.requestSingleInstanceLock()) app.quit()
@@ -193,11 +193,19 @@ function registerIpc(): void {
     if (!r.canceled && r.filePath) await fs.promises.copyFile(item.path, r.filePath)
   })
   // Native OS file drag (Word, Explorer, Teams…). Must use `on`/send: it has to run while the drag gesture is live.
-  ipcMain.on('startDrag', (e, id) => {
+  // Videos are dragged as their looping GIF (Word autoplays GIFs inline, not local MP4s); Alt drags the original.
+  ipcMain.on('startDrag', (e, id, original: unknown) => {
     const item = getItem(String(id))
     if (!item || !fs.existsSync(item.path)) return
+    const gif = item.kind === 'video' && !original ? dragGifPath(item) : null
+    const file = gif && fs.existsSync(gif) ? gif : item.path
+    if (gif && file !== gif) void prepareDragGif(item) // not ready yet: this drag is the MP4, the next one the GIF
     const preview = item.kind === 'image' ? nativeImage.createFromPath(item.path) : nativeImage.createFromPath(iconPath)
-    e.sender.startDrag({ file: item.path, icon: preview.isEmpty() ? iconPath : preview.resize({ width: item.kind === 'image' ? 160 : 64 }) })
+    e.sender.startDrag({ file, icon: preview.isEmpty() ? iconPath : preview.resize({ width: item.kind === 'image' ? 160 : 64 }) })
+  })
+  ipcMain.handle('prepareDrag', (_e, id) => {
+    const item = getItem(String(id))
+    return item ? prepareDragGif(item) : undefined
   })
   ipcMain.handle('renameItem', async (_e, id, name: unknown) => {
     const item = itemOrThrow(id)
@@ -243,11 +251,13 @@ function registerIpc(): void {
     const item = itemOrThrow(id)
     await shell.trashItem(item.path).catch(() => fs.promises.rm(item.path, { force: true }))
     removeItem(item.id)
+    removeDragGif(item.id)
     send('history-changed')
   })
   ipcMain.handle('getUpdateState', () => getUpdateState())
   ipcMain.handle('checkForUpdates', () => checkForUpdates())
   ipcMain.handle('installUpdate', () => installUpdate())
+  ipcMain.handle('skipStartupUpdate', () => skipStartupUpdate())
   ipcMain.handle('recorderToggle', () => recorderToggle())
   ipcMain.handle('recorderStop', () => recorderStop())
   ipcMain.handle('recorderCancel', () => recorderCancel())
@@ -255,15 +265,16 @@ function registerIpc(): void {
 
 app.on('second-instance', showMain)
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   registerMediaProtocol()
   registerIpc()
   nativeTheme.themeSource = getSettings().theme
   nativeTheme.on('updated', updateTitleBar)
+  initUpdater()
+  await startupUpdate() // check (and install) updates before the app opens
   createMainWindow()
   createTray()
   shortcutErrors = registerShortcuts()
-  initUpdater()
 })
 
 app.on('before-quit', (e) => {
